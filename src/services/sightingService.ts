@@ -26,6 +26,7 @@ import type {
 //     "photoUrls": []
 //   }
 // ]
+// Rota de avistamentos: GET /api/v1/sightings que está definida no backend. A função listSightings faz a chamada para essa rota e retorna os dados recebidos.
 export async function listSightings(): Promise<
   SightingResponse[]
 > {

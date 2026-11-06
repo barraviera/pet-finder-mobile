@@ -18,7 +18,7 @@ if (!baseURL) {
 // Criar uma instância do axios com a URL base e configurações padrão
 export const api = axios.create({
   baseURL,
-  timeout: 15000,
+  timeout: 15000, // A requisição terá um limite de 15 segundos
   headers: {
     Accept: 'application/json',
   },

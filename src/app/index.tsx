@@ -1,25 +1,6 @@
-import { StyleSheet, Text, View } from 'react-native';
 
-export default function HomeScreen() {
-  return (
-    <View style={styles.container}>
-      <Text style={styles.title}>Pet Finder Mobile</Text>
-      <Text>Tela limpa para inicio do projeto.</Text>
-    </View>
-  );
+import { Redirect } from 'expo-router';
+
+export default function Index() {
+  return <Redirect href="/login" />;
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    padding: 24,
-  },
-
-  title: {
-    fontSize: 28,
-    fontWeight: '700',
-    marginBottom: 12,
-  },
-});
