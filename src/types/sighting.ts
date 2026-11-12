@@ -1,12 +1,17 @@
 
+export type AnimalSpecies = 'DOG' | 'CAT' | 'OTHER';
+
+export type AnimalSize = 'SMALL' | 'MEDIUM' | 'LARGE';
+
+
 // Definir as interfaces para as requisições e respostas de autenticação
 export interface CreateSightingRequest {
   description: string;
   latitude: number;
   longitude: number;
   address?: string;
-  species: string;
-  size?: string;
+  species: AnimalSpecies;
+  size?: AnimalSize;
   color: string;
   petName?: string;
 }

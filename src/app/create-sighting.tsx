@@ -1,6 +1,7 @@
 
 import { useState } from 'react';
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
   ScrollView,
@@ -9,17 +10,28 @@ import {
   TextInput,
   View,
 } from 'react-native';
+
+import { createSighting } from '@/services/sightingService';
+
 import { router } from 'expo-router';
+// Importa o módulo de localização do Expo para obter a localização do usuário
+import * as Location from 'expo-location';
+
+import type {
+  AnimalSize,
+  AnimalSpecies,
+  CreateSightingRequest,
+} from '@/types/sighting';
 
 // DOG, CAT, OTHER correspondem aos valores esperados pela API para o campo "species".
-const SPECIES = [
+const SPECIES: { label: string; value: AnimalSpecies }[] = [
   { label: 'Cachorro', value: 'DOG' },
   { label: 'Gato', value: 'CAT' },
   { label: 'Outro', value: 'OTHER' },
 ];
 
 // SMALL, MEDIUM, LARGE correspondem aos valores esperados pela API para o campo "size".
-const SIZES = [
+const SIZES: { label: string; value: AnimalSize }[] = [
   { label: 'Pequeno', value: 'SMALL' },
   { label: 'Médio', value: 'MEDIUM' },
   { label: 'Grande', value: 'LARGE' },
@@ -30,14 +42,98 @@ const SIZES = [
 export default function CreateSightingScreen() {
   // Estados para armazenar os valores dos campos do formulário
   const [description, setDescription] = useState('');
-  const [species, setSpecies] = useState('');
-  const [size, setSize] = useState('');
+  const [species, setSpecies] = useState<AnimalSpecies | ''>('');
+  const [size, setSize] = useState<AnimalSize | ''>('');
   const [color, setColor] = useState('');
   const [petName, setPetName] = useState('');
 
+  // Estado para armazenar a localização do usuário. Inicialmente é null, e será preenchido com latitude, longitude e endereço quando obtivermos a localização.
+  // Aqui temos dois estados: location: guarda as coordenadas e o endereço e loadingLocation: controla o carregamento enquanto o GPS é consultado.
+  const [location, setLocation] = useState<{
+    latitude: number;
+    longitude: number;
+    address: string | null;
+  } | null>(null);
+
+  // loadingLocation: controla o carregamento enquanto o GPS é consultado.
+  const [loadingLocation, setLoadingLocation] = useState(false);
+
+  const [submitting, setSubmitting] = useState(false);
+
+  // Função para obter a localização do usuário. Ela solicita permissão, obtém as coordenadas e converte em um endereço aproximado.
+  async function handleGetLocation() {
+    try {
+      setLoadingLocation(true);
+
+      // 1. Verifica e solicita a permissão de localização
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permissão necessária',
+          'Precisamos da sua localização para registrar onde o animal foi encontrado.',
+        );
+        return;
+      }
+
+      // 2. Obtém as coordenadas do dispositivo
+      // getCurrentPositionAsync() obtém as coordenadas geográficas do dispositivo.
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      const { latitude, longitude } = currentLocation.coords;
+
+      // 3. Converte as coordenadas em um endereço aproximado
+      // reverseGeocodeAsync() faz o processo inverso: recebe latitude e longitude e tenta encontrar um endereço correspondente.
+      const addresses = await Location.reverseGeocodeAsync({
+        latitude,
+        longitude,
+      });
+
+      let address: string | null = null;
+
+      if (addresses.length > 0) {
+        const result = addresses[0];
+
+        address = [
+          result.street,
+          result.streetNumber,
+          result.district,
+          result.city,
+          result.region,
+        ]
+          .filter(Boolean)
+          .join(', ');
+      }
+
+      // 4. Armazena os dados no estado
+      setLocation({
+        latitude,
+        longitude,
+        address,
+      });
+
+      Alert.alert(
+        'Localização obtida!',
+        address ?? `Latitude: ${latitude}\nLongitude: ${longitude}`,
+      );
+    } catch (error) {
+      console.error('Erro ao obter localização:', error);
+
+      Alert.alert(
+        'Erro',
+        'Não foi possível obter sua localização. Verifique se o GPS está ativado.',
+      );
+    } finally {
+      setLoadingLocation(false);
+    }
+  }
+
   // Função chamada quando o usuário pressiona o botão "Continuar". 
   // Ela valida os campos obrigatórios e exibe um alerta.
-  function handleContinue() {
+  async function handleContinue() {
+    // 1. Validar os campos obrigatórios
     if (!description.trim() || !species || !color.trim()) {
       Alert.alert(
         'Atenção',
@@ -46,21 +142,63 @@ export default function CreateSightingScreen() {
       return;
     }
 
-    // Por enquanto, apenas validamos os dados.
-    // Na próxima etapa vamos obter a localização
-    // e enviar o cadastro para a API.
+    // 2. Validar a localização
+    if (!location) {
+      Alert.alert(
+        'Localização necessária',
+        'Obtenha sua localização antes de continuar.',
+      );
+      return;
+    }
 
-    Alert.alert(
-      'Formulário validado!',
-      'Os dados foram preenchidos corretamente. Vamos implementar a localização na próxima etapa.',
-    );
+    try {
+      setSubmitting(true);
+
+      // 3. Montar o objeto esperado pela API
+      const data: CreateSightingRequest = {
+        description: description.trim(),
+        latitude: location.latitude,
+        longitude: location.longitude,
+        address: location.address ?? undefined,
+        species,
+        size: size || undefined,
+        color: color.trim(),
+        petName: petName.trim() || undefined,
+      };
+
+      // 4. Enviar os dados para o Spring Boot
+      const response = await createSighting(data);
+
+      console.log('Ocorrência cadastrada:', response);
+
+      // 5. Informar o sucesso
+      Alert.alert(
+        'Cadastro realizado!',
+        'A ocorrência foi cadastrada com sucesso.',
+        [
+          {
+            text: 'OK',
+            onPress: () => router.replace('/home'),
+          },
+        ],
+      );
+    } catch (error) {
+      console.error('Erro ao cadastrar ocorrência:', error);
+
+      Alert.alert(
+        'Erro',
+        'Não foi possível cadastrar a ocorrência. Tente novamente.',
+      );
+    } finally {
+      setSubmitting(false);
+    }
   }
 
   // Função para renderizar as opções de espécie e porte do animal.
-  function renderOptions(
-    options: { label: string; value: string }[],
-    selected: string,
-    onSelect: (value: string) => void,
+  function renderOptions<T extends string>(
+    options: { label: string; value: T }[],
+    selected: T | '',
+    onSelect: (value: T) => void,
   ) {
     return (
       <View style={styles.optionsContainer}>
@@ -145,13 +283,55 @@ export default function CreateSightingScreen() {
           textAlignVertical="top"
         />
 
+        <Text style={styles.label}>Localização *</Text>
+
         <Pressable
-          style={styles.button}
-          onPress={handleContinue}
+          style={styles.locationButton}
+          onPress={handleGetLocation}
+          disabled={loadingLocation}
         >
-          <Text style={styles.buttonText}>
-            Continuar
-          </Text>
+          {loadingLocation ? (
+            <ActivityIndicator color="#23834D" />
+          ) : (
+            <Text style={styles.locationButtonText}>
+              {location ? 'Atualizar localização' : 'Obter minha localização'}
+            </Text>
+          )}
+        </Pressable>
+
+        {location && (
+          <View style={styles.locationInfo}>
+            <Text style={styles.locationSuccess}>
+              ✓ Localização obtida
+            </Text>
+
+            <Text style={styles.locationAddress}>
+              {location.address ?? 'Endereço não identificado'}
+            </Text>
+
+            <Text style={styles.coordinates}>
+              Latitude: {location.latitude.toFixed(6)}
+              {'\n'}
+              Longitude: {location.longitude.toFixed(6)}
+            </Text>
+          </View>
+        )}
+
+        <Pressable
+          style={[
+            styles.button,
+            submitting && styles.buttonDisabled,
+          ]}
+          onPress={handleContinue}
+          disabled={submitting}
+        >
+          {submitting ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={styles.buttonText}>
+              Cadastrar ocorrência
+            </Text>
+          )}
         </Pressable>
 
         <Text style={styles.requiredInfo}>
@@ -257,5 +437,50 @@ const styles = StyleSheet.create({
     fontSize: 12,
     marginTop: 16,
     textAlign: 'center',
+  },
+
+  locationButton: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: '#23834D',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+
+  locationButtonText: {
+    color: '#23834D',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  locationInfo: {
+    backgroundColor: '#EAF4EC',
+    padding: 14,
+    borderRadius: 10,
+    marginTop: 12,
+  },
+
+  locationSuccess: {
+    color: '#23834D',
+    fontWeight: 'bold',
+    fontSize: 14,
+  },
+
+  locationAddress: {
+    color: '#34443A',
+    fontSize: 14,
+    marginTop: 8,
+  },
+
+  coordinates: {
+    color: '#66736A',
+    fontSize: 12,
+    marginTop: 8,
+  },
+
+  buttonDisabled: {
+    opacity: 0.6,
   },
 });

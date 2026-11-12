@@ -33,7 +33,13 @@
           "imageWidth": 76
         }
       ],
-      "expo-secure-store"
+      "expo-secure-store",
+      [
+        "expo-location",
+        {
+          "locationAlwaysAndWhenInUsePermission": "Permita o acesso à localização para registrar onde o pet foi avistado."
+        }
+      ]
     ],
     "experiments": {
       "typedRoutes": true,
