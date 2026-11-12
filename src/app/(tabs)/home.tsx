@@ -1,4 +1,3 @@
-
 import { useCallback, useEffect, useState } from 'react';
 
 import {
@@ -12,15 +11,15 @@ import {
   View,
 } from 'react-native';
 
-import { getCurrentUser } from '@/services/authService';
 import { listSightings } from '@/services/sightingService';
 
-import type { MeResponse } from '@/types/auth';
 import type { SightingResponse } from '@/types/sighting';
 
+import { useAuth } from '@/contexts/AuthContext';
+
+import { router } from 'expo-router';
+
 export default function HomeScreen() {
-  // Dados do usuário autenticado
-  const [user, setUser] = useState<MeResponse | null>(null);
 
   // Lista de avistamentos
   const [sightings, setSightings] = useState<SightingResponse[]>([]);
@@ -30,21 +29,16 @@ export default function HomeScreen() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // Busca os dados da API
+  // Usuário autenticado pelo contexto global
+  const { user } = useAuth();
+
+  // Busca os avistamentos da API
   const loadData = useCallback(async () => {
     try {
       setError(null);
 
-      // Aqui temos um conceito importante de JavaScript.
-      // Estamos realizando duas requisições simultaneamente: Buscar o usuário e Buscar os avistamentos.
-      // Sem Promise.all, poderíamos fazer uma chamada e esperar sua conclusão para só depois iniciar a outra.
-      // Com Promise.all, ambas começam juntas. Se alguma falhar, a operação inteira entra no catch.
-      const [userData, sightingsData] = await Promise.all([
-        getCurrentUser(),
-        listSightings(),
-      ]);
-      // Quando essas funções são executadas, o React atualiza os estados e renderiza novamente a tela com os dados recebidos.
-      setUser(userData);
+      const sightingsData = await listSightings();
+
       setSightings(sightingsData);
 
     } catch (err) {
@@ -69,6 +63,11 @@ export default function HomeScreen() {
   async function handleRefresh() {
     setRefreshing(true);
     await loadData();
+  }
+
+  // Navega para a tela de criação de avistamento
+  function handleCreateSighting() {
+    router.push('/create-sighting');
   }
 
   // Formata a data
@@ -160,6 +159,15 @@ export default function HomeScreen() {
         <Text style={styles.subtitle}>
           Ajude animais a encontrarem o caminho de casa.
         </Text>
+
+        <Pressable
+          style={styles.createButton}
+          onPress={handleCreateSighting}
+        >
+          <Text style={styles.createButtonText}>
+            + Registrar animal
+          </Text>
+        </Pressable>
       </View>
 
       {error ? (
@@ -359,6 +367,20 @@ const styles = StyleSheet.create({
 
   retryText: {
     color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+
+  createButton: {
+    backgroundColor: '#23834D',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginVertical: 16,
+  },
+
+  createButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
     fontWeight: 'bold',
   },
 });

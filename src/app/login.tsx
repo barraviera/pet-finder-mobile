@@ -16,8 +16,7 @@ import {
 
 import { router } from 'expo-router';
 import axios from 'axios';
-
-import { login } from '@/services/authService';
+import { useAuth } from '@/contexts/AuthContext';
 
 export default function LoginScreen() {
   // Estados dos campos do formulário
@@ -26,6 +25,8 @@ export default function LoginScreen() {
 
   // Estado para controlar o carregamento
   const [loading, setLoading] = useState(false);
+
+  const { signIn } = useAuth();
 
   // Executa o login
   async function handleLogin() {
@@ -38,10 +39,10 @@ export default function LoginScreen() {
       return;
     }
 
-    try {   
+    try {
       setLoading(true);
 
-      await login({
+      await signIn({
         email: email.trim(),
         password,
       });
@@ -49,22 +50,24 @@ export default function LoginScreen() {
       // Login realizado: segue para a tela inicial
       router.replace('/home');
 
-    } catch (error) { // Caso ocorra algum erro no login, exibimos uma mensagem de alerta para o usuário
+    } catch (error) {
       if (axios.isAxiosError(error)) {
         if (error.response?.status === 401) {
           Alert.alert(
             'Login inválido',
             'Verifique seu e-mail e sua senha.',
           );
-          return;
+        } else if (!error.response) {
+          Alert.alert(
+            'Erro de conexão',
+            'Não foi possível conectar ao servidor.',
+          );
+        } else {
+          Alert.alert(
+            'Erro',
+            'Não foi possível realizar o login.',
+          );
         }
-
-        Alert.alert(
-          'Erro',
-          error.response
-            ? 'Não foi possível realizar o login.'
-            : 'Não foi possível conectar ao servidor.',
-        );
       } else {
         Alert.alert(
           'Erro',
@@ -115,6 +118,8 @@ export default function LoginScreen() {
             keyboardType="email-address"
             autoCapitalize="none"
             autoCorrect={false}
+            autoComplete="email"
+            textContentType="emailAddress"
           />
 
           <Text style={styles.label}>
@@ -129,6 +134,8 @@ export default function LoginScreen() {
             onChangeText={setPassword}
             secureTextEntry
             autoCapitalize="none"
+            autoComplete="current-password"
+            textContentType="password"
           />
 
           {/* Quando o usuário clicar em Entrar, executar a função handleLogin */}
