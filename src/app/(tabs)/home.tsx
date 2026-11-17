@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useState } from 'react';
+import { useFocusEffect } from 'expo-router';
 
 import {
   ActivityIndicator,
@@ -54,10 +55,12 @@ export default function HomeScreen() {
     }
   }, []);
 
-  // Executa quando a tela é montada
-  useEffect(() => {
-    loadData();
-  }, [loadData]);
+  // Antes usavamos o useEffect, mas agora estamos usando o useFocusEffect para recarregar os dados sempre que a tela for focada
+  useFocusEffect(
+    useCallback(() => {
+      loadData();
+    }, [loadData])
+  );
 
   // Atualização manual da lista
   async function handleRefresh() {
