@@ -39,6 +39,12 @@
         {
           "locationAlwaysAndWhenInUsePermission": "Permita o acesso à localização para registrar onde o pet foi avistado."
         }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "Permita o acesso às fotos para anexar uma imagem do pet avistado."
+        }
       ]
     ],
     "experiments": {
