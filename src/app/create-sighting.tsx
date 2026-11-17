@@ -12,7 +12,10 @@ import {
   View,
 } from 'react-native';
 
-import { createSighting } from '@/services/sightingService';
+import {
+  createSighting,
+  uploadSightingPhotos
+} from '@/services/sightingService';
 
 import { router } from 'expo-router';
 // Importa o módulo de localização do Expo para obter a localização do usuário
@@ -25,6 +28,8 @@ import type {
 } from '@/types/sighting';
 
 import * as ImagePicker from 'expo-image-picker';
+
+import axios from 'axios';
 
 // DOG, CAT, OTHER correspondem aos valores esperados pela API para o campo "species".
 const SPECIES: { label: string; value: AnimalSpecies }[] = [
@@ -140,7 +145,6 @@ export default function CreateSightingScreen() {
   // Função chamada quando o usuário pressiona o botão "Continuar". 
   // Ela valida os campos obrigatórios e exibe um alerta.
   async function handleContinue() {
-    // 1. Validar os campos obrigatórios
     if (!description.trim() || !species || !color.trim()) {
       Alert.alert(
         'Atenção',
@@ -149,7 +153,6 @@ export default function CreateSightingScreen() {
       return;
     }
 
-    // 2. Validar a localização
     if (!location) {
       Alert.alert(
         'Localização necessária',
@@ -161,7 +164,7 @@ export default function CreateSightingScreen() {
     try {
       setSubmitting(true);
 
-      // 3. Montar o objeto esperado pela API
+      // 1. Monta os dados da ocorrência
       const data: CreateSightingRequest = {
         description: description.trim(),
         latitude: location.latitude,
@@ -173,15 +176,49 @@ export default function CreateSightingScreen() {
         petName: petName.trim() || undefined,
       };
 
-      // 4. Enviar os dados para o Spring Boot
+      // 2. Cadastra a ocorrência
       const response = await createSighting(data);
 
       console.log('Ocorrência cadastrada:', response);
 
-      // 5. Informar o sucesso
+      // 3. Envia as fotos, caso existam
+      if (photos.length > 0) {
+        try {
+          await uploadSightingPhotos(response.id, photos);
+
+          console.log('Fotos enviadas com sucesso!');
+        } catch (photoError) {
+          if (axios.isAxiosError(photoError)) {
+            console.error('Erro no upload:', {
+              message: photoError.message,
+              status: photoError.response?.status,
+              response: photoError.response?.data,
+            });
+          } else {
+            console.error('Erro no upload:', photoError);
+          }
+
+          Alert.alert(
+            'Ocorrência cadastrada',
+            'A ocorrência foi salva, mas não foi possível enviar as fotos.',
+            [
+              {
+                text: 'OK',
+                onPress: () => router.replace('/home'),
+              },
+            ],
+          );
+
+          return;
+        }
+      }
+
+      // 4. Confirma o sucesso
       Alert.alert(
         'Cadastro realizado!',
-        'A ocorrência foi cadastrada com sucesso.',
+        photos.length > 0
+          ? 'A ocorrência e as fotos foram cadastradas com sucesso.'
+          : 'A ocorrência foi cadastrada com sucesso.',
         [
           {
             text: 'OK',
@@ -194,240 +231,258 @@ export default function CreateSightingScreen() {
 
       Alert.alert(
         'Erro',
-        'Não foi possível cadastrar a ocorrência. Tente novamente.',
+        'Não foi possível cadastrar a ocorrência. Verifique sua conexão e tente novamente.',
       );
     } finally {
       setSubmitting(false);
     }
   }
 
-  // Função para renderizar as opções de espécie e porte do animal.
-  function renderOptions<T extends string>(
-    options: { label: string; value: T }[],
-    selected: T | '',
-    onSelect: (value: T) => void,
-  ) {
-    return (
-      <View style={styles.optionsContainer}>
-        {options.map((option) => {
-          const isSelected = selected === option.value;
+// Função para renderizar as opções de espécie e porte do animal.
+function renderOptions<T extends string>(
+  options: { label: string; value: T }[],
+  selected: T | '',
+  onSelect: (value: T) => void,
+) {
+  return (
+    <View style={styles.optionsContainer}>
+      {options.map((option) => {
+        const isSelected = selected === option.value;
 
-          return (
-            <Pressable
-              key={option.value}
+        return (
+          <Pressable
+            key={option.value}
+            style={[
+              styles.option,
+              isSelected && styles.optionSelected,
+            ]}
+            onPress={() => onSelect(option.value)}
+          >
+            <Text
               style={[
-                styles.option,
-                isSelected && styles.optionSelected,
+                styles.optionText,
+                isSelected && styles.optionTextSelected,
               ]}
-              onPress={() => onSelect(option.value)}
             >
-              <Text
-                style={[
-                  styles.optionText,
-                  isSelected && styles.optionTextSelected,
-                ]}
-              >
-                {option.label}
-              </Text>
-            </Pressable>
-          );
-        })}
-      </View>
-    );
-  }
-
-  // Função para abrir a galeria de fotos e permitir que o usuário selecione imagens do animal encontrado.
-  async function handleSelectPhotos() {
-    try {
-      // Solicita permissão para acessar a galeria
-      const permission =
-        await ImagePicker.requestMediaLibraryPermissionsAsync();
-
-      if (!permission.granted) {
-        Alert.alert(
-          'Permissão necessária',
-          'Precisamos de acesso à galeria para selecionar as fotos do animal.',
+              {option.label}
+            </Text>
+          </Pressable>
         );
-        return;
-      }
+      })}
+    </View>
+  );
+}
 
-      // Abre a galeria do dispositivo
-      const result = await ImagePicker.launchImageLibraryAsync({
-        mediaTypes: ['images'],
-        allowsMultipleSelection: true, // permite selecionar várias imagens.
-        selectionLimit: 5, // limita a seleção a cinco fotos.
-        quality: 0.8, // reduz um pouco a qualidade para ajudar a controlar o tamanho dos arquivos.
-      });
+// Função para abrir a galeria de fotos e permitir que o usuário selecione imagens do animal encontrado.
+async function handleSelectPhotos() {
+  try {
+    // Solicita permissão para acessar a galeria
+    const permission =
+      await ImagePicker.requestMediaLibraryPermissionsAsync();
 
-      if (result.canceled) {
-        return;
-      }
-
-      setPhotos(result.assets);
-    } catch (error) {
-      console.error('Erro ao selecionar fotos:', error);
-
+    if (!permission.granted) {
       Alert.alert(
-        'Erro',
-        'Não foi possível acessar a galeria de imagens.',
+        'Permissão necessária',
+        'Precisamos de acesso à galeria para selecionar as fotos do animal.',
+      );
+      return;
+    }
+
+    // Abre a galeria do dispositivo
+    const result = await ImagePicker.launchImageLibraryAsync({
+      mediaTypes: ['images'],
+      allowsMultipleSelection: true, // permite selecionar várias imagens.
+      selectionLimit: 3, // limita a seleção a três fotos.
+      quality: 0.8, // reduz um pouco a qualidade para ajudar a controlar o tamanho dos arquivos.
+    });
+
+    if (result.canceled) {
+      return;
+    }
+
+    const allowedTypes = [
+      'image/jpeg',
+      'image/png',
+      'image/webp',
+    ];
+
+    const validPhotos = result.assets.filter((photo) =>
+      allowedTypes.includes(photo.mimeType?.toLowerCase() ?? ''),
+    );
+
+    if (validPhotos.length !== result.assets.length) {
+      Alert.alert(
+        'Formato não permitido',
+        'Algumas imagens foram ignoradas. Utilize JPEG, PNG ou WEBP.',
       );
     }
-  }
 
-  // Função para remover uma foto selecionada pelo usuário. Ela recebe o índice da foto a ser removida e atualiza o estado photos.
-  // Aqui estamos utilizando filter() para criar um novo array sem a imagem selecionada.
-  function handleRemovePhoto(index: number) {
-    setPhotos((currentPhotos) =>
-      currentPhotos.filter((_, i) => i !== index),
+    setPhotos(validPhotos);
+
+  } catch (error) {
+    console.error('Erro ao selecionar fotos:', error);
+
+    Alert.alert(
+      'Erro',
+      'Não foi possível acessar a galeria de imagens.',
     );
   }
+}
 
-  return (
-    <ScrollView
-      style={styles.container}
-      contentContainerStyle={styles.content}
-      keyboardShouldPersistTaps="handled"
-    >
-      <Pressable onPress={() => router.back()}>
-        <Text style={styles.backButton}>‹ Voltar</Text>
+// Função para remover uma foto selecionada pelo usuário. Ela recebe o índice da foto a ser removida e atualiza o estado photos.
+// Aqui estamos utilizando filter() para criar um novo array sem a imagem selecionada.
+function handleRemovePhoto(index: number) {
+  setPhotos((currentPhotos) =>
+    currentPhotos.filter((_, i) => i !== index),
+  );
+}
+
+return (
+  <ScrollView
+    style={styles.container}
+    contentContainerStyle={styles.content}
+    keyboardShouldPersistTaps="handled"
+  >
+    <Pressable onPress={() => router.back()}>
+      <Text style={styles.backButton}>‹ Voltar</Text>
+    </Pressable>
+
+    <Text style={styles.title}>Encontrou um animal?</Text>
+
+    <Text style={styles.subtitle}>
+      Ajude a comunidade a encontrar o tutor desse animal.
+    </Text>
+
+    <View style={styles.form}>
+      <Text style={styles.label}>Espécie *</Text>
+
+      {renderOptions(SPECIES, species, setSpecies)}
+
+      <Text style={styles.label}>Porte</Text>
+
+      {renderOptions(SIZES, size, setSize)}
+
+      <Text style={styles.label}>Cor predominante *</Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Ex.: Marrom e branco"
+        value={color}
+        onChangeText={setColor}
+      />
+
+      <Text style={styles.label}>Nome do animal</Text>
+
+      <TextInput
+        style={styles.input}
+        placeholder="Se souber o nome"
+        value={petName}
+        onChangeText={setPetName}
+      />
+
+      <Text style={styles.label}>Descrição *</Text>
+
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        placeholder="Descreva o animal, onde foi encontrado e outras características..."
+        value={description}
+        onChangeText={setDescription}
+        multiline
+        textAlignVertical="top"
+      />
+
+      <Text style={styles.label}>Localização *</Text>
+
+      <Pressable
+        style={styles.locationButton}
+        onPress={handleGetLocation}
+        disabled={loadingLocation}
+      >
+        {loadingLocation ? (
+          <ActivityIndicator color="#23834D" />
+        ) : (
+          <Text style={styles.locationButtonText}>
+            {location ? 'Atualizar localização' : 'Obter minha localização'}
+          </Text>
+        )}
       </Pressable>
 
-      <Text style={styles.title}>Encontrou um animal?</Text>
+      {location && (
+        <View style={styles.locationInfo}>
+          <Text style={styles.locationSuccess}>
+            ✓ Localização obtida
+          </Text>
 
-      <Text style={styles.subtitle}>
-        Ajude a comunidade a encontrar o tutor desse animal.
+          <Text style={styles.locationAddress}>
+            {location.address ?? 'Endereço não identificado'}
+          </Text>
+
+          <Text style={styles.coordinates}>
+            Latitude: {location.latitude.toFixed(6)}
+            {'\n'}
+            Longitude: {location.longitude.toFixed(6)}
+          </Text>
+        </View>
+      )}
+
+      <Text style={styles.label}>Fotos do animal</Text>
+
+      <Pressable
+        style={styles.photoButton}
+        onPress={handleSelectPhotos}
+      >
+        <Text style={styles.photoButtonText}>
+          + Selecionar fotos da galeria
+        </Text>
+      </Pressable>
+
+      {photos.length > 0 && (
+        <View style={styles.photosContainer}>
+          {photos.map((photo, index) => (
+            <View key={photo.assetId ?? photo.uri} style={styles.photoItem}>
+              <Image
+                source={{ uri: photo.uri }}
+                style={styles.photoPreview}
+              />
+
+              <Pressable
+                style={styles.removePhotoButton}
+                onPress={() => handleRemovePhoto(index)}
+              >
+                <Text style={styles.removePhotoText}>×</Text>
+              </Pressable>
+            </View>
+          ))}
+        </View>
+      )}
+
+      <Text style={styles.photoInfo}>
+        Você pode selecionar até 3 fotos.
       </Text>
 
-      <View style={styles.form}>
-        <Text style={styles.label}>Espécie *</Text>
-
-        {renderOptions(SPECIES, species, setSpecies)}
-
-        <Text style={styles.label}>Porte</Text>
-
-        {renderOptions(SIZES, size, setSize)}
-
-        <Text style={styles.label}>Cor predominante *</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Ex.: Marrom e branco"
-          value={color}
-          onChangeText={setColor}
-        />
-
-        <Text style={styles.label}>Nome do animal</Text>
-
-        <TextInput
-          style={styles.input}
-          placeholder="Se souber o nome"
-          value={petName}
-          onChangeText={setPetName}
-        />
-
-        <Text style={styles.label}>Descrição *</Text>
-
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Descreva o animal, onde foi encontrado e outras características..."
-          value={description}
-          onChangeText={setDescription}
-          multiline
-          textAlignVertical="top"
-        />
-
-        <Text style={styles.label}>Localização *</Text>
-
-        <Pressable
-          style={styles.locationButton}
-          onPress={handleGetLocation}
-          disabled={loadingLocation}
-        >
-          {loadingLocation ? (
-            <ActivityIndicator color="#23834D" />
-          ) : (
-            <Text style={styles.locationButtonText}>
-              {location ? 'Atualizar localização' : 'Obter minha localização'}
-            </Text>
-          )}
-        </Pressable>
-
-        {location && (
-          <View style={styles.locationInfo}>
-            <Text style={styles.locationSuccess}>
-              ✓ Localização obtida
-            </Text>
-
-            <Text style={styles.locationAddress}>
-              {location.address ?? 'Endereço não identificado'}
-            </Text>
-
-            <Text style={styles.coordinates}>
-              Latitude: {location.latitude.toFixed(6)}
-              {'\n'}
-              Longitude: {location.longitude.toFixed(6)}
-            </Text>
-          </View>
-        )}
-
-        <Text style={styles.label}>Fotos do animal</Text>
-
-        <Pressable
-          style={styles.photoButton}
-          onPress={handleSelectPhotos}
-        >
-          <Text style={styles.photoButtonText}>
-            + Selecionar fotos da galeria
+      <Pressable
+        style={[
+          styles.button,
+          submitting && styles.buttonDisabled,
+        ]}
+        onPress={handleContinue}
+        disabled={submitting}
+      >
+        {submitting ? (
+          <ActivityIndicator color="#FFFFFF" />
+        ) : (
+          <Text style={styles.buttonText}>
+            Cadastrar ocorrência
           </Text>
-        </Pressable>
-
-        {photos.length > 0 && (
-          <View style={styles.photosContainer}>
-            {photos.map((photo, index) => (
-              <View key={photo.assetId ?? photo.uri} style={styles.photoItem}>
-                <Image
-                  source={{ uri: photo.uri }}
-                  style={styles.photoPreview}
-                />
-
-                <Pressable
-                  style={styles.removePhotoButton}
-                  onPress={() => handleRemovePhoto(index)}
-                >
-                  <Text style={styles.removePhotoText}>×</Text>
-                </Pressable>
-              </View>
-            ))}
-          </View>
         )}
+      </Pressable>
 
-        <Text style={styles.photoInfo}>
-          Você pode selecionar até 5 fotos.
-        </Text>
-
-        <Pressable
-          style={[
-            styles.button,
-            submitting && styles.buttonDisabled,
-          ]}
-          onPress={handleContinue}
-          disabled={submitting}
-        >
-          {submitting ? (
-            <ActivityIndicator color="#FFFFFF" />
-          ) : (
-            <Text style={styles.buttonText}>
-              Cadastrar ocorrência
-            </Text>
-          )}
-        </Pressable>
-
-        <Text style={styles.requiredInfo}>
-          * Campos obrigatórios
-        </Text>
-      </View>
-    </ScrollView>
-  );
+      <Text style={styles.requiredInfo}>
+        * Campos obrigatórios
+      </Text>
+    </View>
+  </ScrollView>
+);
 }
 
 const styles = StyleSheet.create({

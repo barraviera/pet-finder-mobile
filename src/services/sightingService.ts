@@ -6,6 +6,14 @@ import type {
   SightingResponse,
 } from '@/types/sighting';
 
+import type { ImagePickerAsset } from 'expo-image-picker';
+
+const ALLOWED_IMAGE_TYPES = [
+  'image/jpeg',
+  'image/png',
+  'image/webp',
+];
+
 // O tipo SightingResponse[] indica que esperamos receber um array de avistamentos.
 // Uma resposta hipotética da API poderia ser:
 // [
@@ -78,4 +86,57 @@ export async function flagSighting(
   );
 
   return response.data;
+}
+
+// FormData: cria o conteúdo da requisição multipart.
+// forEach(): percorre todas as imagens selecionadas.
+// uri: informa onde o arquivo está no dispositivo.
+// name: define o nome do arquivo.
+// type: informa o tipo MIME da imagem.
+// photos: é o nome do campo que o Spring Boot espera receber.
+export async function uploadSightingPhotos(
+  sightingId: string,
+  photos: ImagePickerAsset[],
+): Promise<void> {
+  if (photos.length === 0) {
+    return;
+  }
+
+  if (photos.length > 3) {
+    throw new Error('O limite é de 3 fotos por ocorrência.');
+  }
+
+  const formData = new FormData();
+
+  photos.forEach((photo, index) => {
+    const mimeType = photo.mimeType?.toLowerCase();
+
+    if (!mimeType || !ALLOWED_IMAGE_TYPES.includes(mimeType)) {
+      throw new Error(
+        `Formato de imagem não permitido: ${photo.fileName ?? photo.uri}`,
+      );
+    }
+
+    const extension = mimeType.split('/')[1];
+
+    formData.append(
+      'photos',
+      {
+        uri: photo.uri,
+        name: photo.fileName ?? `photo_${index}.${extension}`,
+        type: mimeType,
+      } as any,
+    );
+  });
+
+  await api.post(
+    `/api/v1/sightings/${sightingId}/photos`,
+    formData,
+    {
+      timeout: 60000,
+      headers: {
+        Accept: 'application/json',
+      },
+    },
+  );
 }
