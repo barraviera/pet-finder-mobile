@@ -3,6 +3,7 @@ import { useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -22,6 +23,8 @@ import type {
   AnimalSpecies,
   CreateSightingRequest,
 } from '@/types/sighting';
+
+import * as ImagePicker from 'expo-image-picker';
 
 // DOG, CAT, OTHER correspondem aos valores esperados pela API para o campo "species".
 const SPECIES: { label: string; value: AnimalSpecies }[] = [
@@ -59,6 +62,10 @@ export default function CreateSightingScreen() {
   const [loadingLocation, setLoadingLocation] = useState(false);
 
   const [submitting, setSubmitting] = useState(false);
+
+  // Estado para armazenar as fotos selecionadas pelo usuário
+  // Estamos utilizando um array porque queremos permitir o envio de várias fotos de uma mesma ocorrência.
+  const [photos, setPhotos] = useState<ImagePicker.ImagePickerAsset[]>([]);
 
   // Função para obter a localização do usuário. Ela solicita permissão, obtém as coordenadas e converte em um endereço aproximado.
   async function handleGetLocation() {
@@ -229,6 +236,52 @@ export default function CreateSightingScreen() {
     );
   }
 
+  // Função para abrir a galeria de fotos e permitir que o usuário selecione imagens do animal encontrado.
+  async function handleSelectPhotos() {
+    try {
+      // Solicita permissão para acessar a galeria
+      const permission =
+        await ImagePicker.requestMediaLibraryPermissionsAsync();
+
+      if (!permission.granted) {
+        Alert.alert(
+          'Permissão necessária',
+          'Precisamos de acesso à galeria para selecionar as fotos do animal.',
+        );
+        return;
+      }
+
+      // Abre a galeria do dispositivo
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ['images'],
+        allowsMultipleSelection: true, // permite selecionar várias imagens.
+        selectionLimit: 5, // limita a seleção a cinco fotos.
+        quality: 0.8, // reduz um pouco a qualidade para ajudar a controlar o tamanho dos arquivos.
+      });
+
+      if (result.canceled) {
+        return;
+      }
+
+      setPhotos(result.assets);
+    } catch (error) {
+      console.error('Erro ao selecionar fotos:', error);
+
+      Alert.alert(
+        'Erro',
+        'Não foi possível acessar a galeria de imagens.',
+      );
+    }
+  }
+
+  // Função para remover uma foto selecionada pelo usuário. Ela recebe o índice da foto a ser removida e atualiza o estado photos.
+  // Aqui estamos utilizando filter() para criar um novo array sem a imagem selecionada.
+  function handleRemovePhoto(index: number) {
+    setPhotos((currentPhotos) =>
+      currentPhotos.filter((_, i) => i !== index),
+    );
+  }
+
   return (
     <ScrollView
       style={styles.container}
@@ -316,6 +369,41 @@ export default function CreateSightingScreen() {
             </Text>
           </View>
         )}
+
+        <Text style={styles.label}>Fotos do animal</Text>
+
+        <Pressable
+          style={styles.photoButton}
+          onPress={handleSelectPhotos}
+        >
+          <Text style={styles.photoButtonText}>
+            + Selecionar fotos da galeria
+          </Text>
+        </Pressable>
+
+        {photos.length > 0 && (
+          <View style={styles.photosContainer}>
+            {photos.map((photo, index) => (
+              <View key={photo.assetId ?? photo.uri} style={styles.photoItem}>
+                <Image
+                  source={{ uri: photo.uri }}
+                  style={styles.photoPreview}
+                />
+
+                <Pressable
+                  style={styles.removePhotoButton}
+                  onPress={() => handleRemovePhoto(index)}
+                >
+                  <Text style={styles.removePhotoText}>×</Text>
+                </Pressable>
+              </View>
+            ))}
+          </View>
+        )}
+
+        <Text style={styles.photoInfo}>
+          Você pode selecionar até 5 fotos.
+        </Text>
 
         <Pressable
           style={[
@@ -482,5 +570,66 @@ const styles = StyleSheet.create({
 
   buttonDisabled: {
     opacity: 0.6,
+  },
+
+  photoButton: {
+    minHeight: 50,
+    borderWidth: 1,
+    borderColor: '#23834D',
+    borderStyle: 'dashed',
+    borderRadius: 10,
+    alignItems: 'center',
+    justifyContent: 'center',
+    padding: 12,
+  },
+
+  photoButtonText: {
+    color: '#23834D',
+    fontSize: 15,
+    fontWeight: '600',
+  },
+
+  photosContainer: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 12,
+    marginTop: 16,
+  },
+
+  photoItem: {
+    width: 100,
+    height: 100,
+    position: 'relative',
+  },
+
+  photoPreview: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 10,
+  },
+
+  removePhotoButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    width: 26,
+    height: 26,
+    borderRadius: 13,
+    backgroundColor: '#D64545',
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+
+  removePhotoText: {
+    color: '#FFFFFF',
+    fontSize: 20,
+    fontWeight: 'bold',
+    lineHeight: 23,
+  },
+
+  photoInfo: {
+    fontSize: 12,
+    color: '#89938B',
+    marginTop: 8,
   },
 });
