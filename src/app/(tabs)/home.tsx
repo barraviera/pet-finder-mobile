@@ -88,10 +88,17 @@ export default function HomeScreen() {
     return new Date(date).toLocaleDateString('pt-BR');
   }
 
-  // Componente de cada avistamento
+  // Componente (card) de cada avistamento
   function renderSighting({ item }: { item: SightingResponse }) {
     return (
-      <View style={styles.card}>
+      // Pressable: permite detectar o toque do usuário.
+      // onPress: executa uma ação quando o card é pressionado.
+      // router.push: navega para outra tela.
+      // ${item.id}: envia o identificador daquela ocorrência na URL.
+      <Pressable
+        style={styles.card}
+        onPress={() => router.push(`/sighting/${item.id}`)}
+      >
 
         {item.photoUrls?.length > 0 ? (
           <Image
@@ -140,7 +147,7 @@ export default function HomeScreen() {
           </View>
 
         </View>
-      </View>
+      </Pressable>
     );
   }
 
