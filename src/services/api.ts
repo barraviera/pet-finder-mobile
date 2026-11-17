@@ -35,3 +35,11 @@ api.interceptors.request.use(async (config) => {
   // Retornar a configuração da requisição para que ela seja enviada com o token incluído
   return config;
 });
+
+export function getImageUrl(path: string): string {
+  if (path.startsWith('http://') || path.startsWith('https://')) {
+    return path;
+  }
+
+  return `${baseURL}${path.startsWith('/') ? '' : '/'}${path}`;
+}

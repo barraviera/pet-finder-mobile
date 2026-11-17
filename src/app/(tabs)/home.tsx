@@ -20,6 +20,8 @@ import { useAuth } from '@/contexts/AuthContext';
 
 import { router } from 'expo-router';
 
+import { getImageUrl } from '@/services/api';
+
 export default function HomeScreen() {
 
   // Lista de avistamentos
@@ -39,6 +41,14 @@ export default function HomeScreen() {
       setError(null);
 
       const sightingsData = await listSightings();
+
+      console.log(
+        'URLs das fotos:',
+        sightingsData.map((item) => ({
+          id: item.id,
+          photos: item.photoUrls,
+        })),
+      );
 
       setSightings(sightingsData);
 
@@ -85,7 +95,7 @@ export default function HomeScreen() {
 
         {item.photoUrls?.length > 0 ? (
           <Image
-            source={{ uri: item.photoUrls[0] }}
+            source={{ uri: getImageUrl(item.photoUrls[0]) }}
             style={styles.photo}
             resizeMode="cover"
           />
