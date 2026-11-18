@@ -1,180 +1,239 @@
-import { Image } from 'expo-image';
-import { SymbolView } from 'expo-symbols';
-import { Platform, Pressable, ScrollView, StyleSheet } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { useEffect, useRef, useState } from 'react';
+import {
+  ActivityIndicator,
+  Pressable,
+  StyleSheet,
+  Text,
+  View,
+} from 'react-native';
 
-import { ExternalLink } from '@/components/external-link';
-import { ThemedText } from '@/components/themed-text';
-import { ThemedView } from '@/components/themed-view';
-import { Collapsible } from '@/components/ui/collapsible';
-import { WebBadge } from '@/components/web-badge';
-import { BottomTabInset, MaxContentWidth, Spacing } from '@/constants/theme';
-import { useTheme } from '@/hooks/use-theme';
+import MapView, { Marker } from 'react-native-maps';
+import { router } from 'expo-router';
 
-export default function TabTwoScreen() {
-  const safeAreaInsets = useSafeAreaInsets();
-  const insets = {
-    ...safeAreaInsets,
-    bottom: safeAreaInsets.bottom + BottomTabInset + Spacing.three,
-  };
-  const theme = useTheme();
+import { listSightings } from '@/services/sightingService';
+import type { SightingResponse } from '@/types/sighting';
 
-  const contentPlatformStyle = Platform.select({
-    android: {
-      paddingTop: insets.top,
-      paddingLeft: insets.left,
-      paddingRight: insets.right,
-      paddingBottom: insets.bottom,
-    },
-    web: {
-      paddingTop: Spacing.six,
-      paddingBottom: Spacing.four,
-    },
-  });
+export default function ExploreScreen() {
+  const mapRef = useRef<MapView>(null);
+
+  const [sightings, setSightings] = useState<SightingResponse[]>([]);
+  const [selectedSighting, setSelectedSighting] =
+    useState<SightingResponse | null>(null);
+
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [mapReady, setMapReady] = useState(false);
+
+  // Busca as ocorrências na API
+  useEffect(() => {
+    async function loadSightings() {
+      try {
+        setError(null);
+
+        const data = await listSightings();
+        setSightings(data);
+
+      } catch (err) {
+        console.error('Erro ao carregar ocorrências no mapa:', err);
+        setError('Não foi possível carregar as ocorrências.');
+
+      } finally {
+        setLoading(false);
+      }
+    }
+
+    loadSightings();
+  }, []);
+
+  // Ajusta o mapa para enquadrar os marcadores
+  useEffect(() => {
+    if (!mapReady || sightings.length === 0) {
+      return;
+    }
+
+    const coordinates = sightings.map((item) => ({
+      latitude: item.latitude,
+      longitude: item.longitude,
+    }));
+
+    if (coordinates.length === 1) {
+      mapRef.current?.animateToRegion(
+        {
+          ...coordinates[0],
+          latitudeDelta: 0.02,
+          longitudeDelta: 0.02,
+        },
+        800,
+      );
+    } else {
+      mapRef.current?.fitToCoordinates(coordinates, {
+        edgePadding: {
+          top: 80,
+          right: 60,
+          bottom: 100,
+          left: 60,
+        },
+        animated: true,
+      });
+    }
+  }, [mapReady, sightings]);
 
   return (
-    <ScrollView
-      style={[styles.scrollView, { backgroundColor: theme.background }]}
-      contentInset={insets}
-      contentContainerStyle={[styles.contentContainer, contentPlatformStyle]}>
-      <ThemedView style={styles.container}>
-        <ThemedView style={styles.titleContainer}>
-          <ThemedText type="subtitle">Explore</ThemedText>
-          <ThemedText style={styles.centerText} themeColor="textSecondary">
-            This starter app includes example{'\n'}code to help you get started.
-          </ThemedText>
+    <View style={styles.container}>
+      <MapView
+        ref={mapRef}
+        style={styles.map}
+        initialRegion={{
+          latitude: -23.5505,
+          longitude: -46.6333,
+          latitudeDelta: 0.05,
+          longitudeDelta: 0.05,
+        }}
+        onMapReady={() => setMapReady(true)}
+        onPress={() => setSelectedSighting(null)}
+      >
+        {sightings.map((item) => (
+          <Marker
+            key={item.id}
+            coordinate={{
+              latitude: item.latitude,
+              longitude: item.longitude,
+            }}
+            title={`${item.species} · ${item.color}`}
+            description={item.description}
+            onPress={() => setSelectedSighting(item)}
+          />
+        ))}
+      </MapView>
 
-          <ExternalLink href="https://docs.expo.dev" asChild>
-            <Pressable style={({ pressed }) => pressed && styles.pressed}>
-              <ThemedView type="backgroundElement" style={styles.linkButton}>
-                <ThemedText type="link">Expo documentation</ThemedText>
-                <SymbolView
-                  tintColor={theme.text}
-                  name={{ ios: 'arrow.up.right.square', android: 'link', web: 'link' }}
-                  size={12}
-                />
-              </ThemedView>
-            </Pressable>
-          </ExternalLink>
-        </ThemedView>
+      {loading && (
+        <View style={styles.message}>
+          <ActivityIndicator size="small" color="#23834D" />
+          <Text style={styles.messageText}>
+            Carregando ocorrências...
+          </Text>
+        </View>
+      )}
 
-        <ThemedView style={styles.sectionsWrapper}>
-          <Collapsible title="File-based routing">
-            <ThemedText type="small">
-              This app has two screens: <ThemedText type="code">src/app/index.tsx</ThemedText> and{' '}
-              <ThemedText type="code">src/app/explore.tsx</ThemedText>
-            </ThemedText>
-            <ThemedText type="small">
-              The layout file in <ThemedText type="code">src/app/_layout.tsx</ThemedText> sets up
-              the tab navigator.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/router/introduction">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      {error && (
+        <View style={styles.message}>
+          <Text style={styles.errorText}>{error}</Text>
+        </View>
+      )}
 
-          <Collapsible title="Android, iOS, and web support">
-            <ThemedView type="backgroundElement" style={styles.collapsibleContent}>
-              <ThemedText type="small">
-                You can open this project on Android, iOS, and the web. To open the web version,
-                press <ThemedText type="smallBold">w</ThemedText> in the terminal running this
-                project.
-              </ThemedText>
-              <Image
-                source={require('@/assets/images/tutorial-web.png')}
-                style={styles.imageTutorial}
-              />
-            </ThemedView>
-          </Collapsible>
+      {!loading && !error && sightings.length === 0 && (
+        <View style={styles.message}>
+          <Text style={styles.messageText}>
+            Nenhuma ocorrência encontrada.
+          </Text>
+        </View>
+      )}
 
-          <Collapsible title="Images">
-            <ThemedText type="small">
-              For static images, you can use the <ThemedText type="code">@2x</ThemedText> and{' '}
-              <ThemedText type="code">@3x</ThemedText> suffixes to provide files for different
-              screen densities.
-            </ThemedText>
-            <Image source={require('@/assets/images/react-logo.png')} style={styles.imageReact} />
-            <ExternalLink href="https://reactnative.dev/docs/images">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+      {selectedSighting && (
+        <View style={styles.selectedCard}>
+          <Text style={styles.species}>
+            {selectedSighting.species} · {selectedSighting.color}
+          </Text>
 
-          <Collapsible title="Light and dark mode components">
-            <ThemedText type="small">
-              This template has light and dark mode support. The{' '}
-              <ThemedText type="code">useColorScheme()</ThemedText> hook lets you inspect what the
-              user&apos;s current color scheme is, and so you can adjust UI colors accordingly.
-            </ThemedText>
-            <ExternalLink href="https://docs.expo.dev/develop/user-interface/color-themes/">
-              <ThemedText type="linkPrimary">Learn more</ThemedText>
-            </ExternalLink>
-          </Collapsible>
+          <Text style={styles.description} numberOfLines={2}>
+            {selectedSighting.description}
+          </Text>
 
-          <Collapsible title="Animations">
-            <ThemedText type="small">
-              This template includes an example of an animated component. The{' '}
-              <ThemedText type="code">src/components/ui/collapsible.tsx</ThemedText> component uses
-              the powerful <ThemedText type="code">react-native-reanimated</ThemedText> library to
-              animate opening this hint.
-            </ThemedText>
-          </Collapsible>
-        </ThemedView>
-        {Platform.OS === 'web' && <WebBadge />}
-      </ThemedView>
-    </ScrollView>
+          {selectedSighting.address && (
+            <Text style={styles.address} numberOfLines={1}>
+              {selectedSighting.address}
+            </Text>
+          )}
+
+          <Pressable
+            style={styles.detailsButton}
+            onPress={() =>
+              router.push(`/sighting/${selectedSighting.id}`)
+            }
+          >
+            <Text style={styles.detailsButtonText}>
+              Ver detalhes
+            </Text>
+          </Pressable>
+        </View>
+      )}
+    </View>
   );
 }
 
 const styles = StyleSheet.create({
-  scrollView: {
+  container: {
     flex: 1,
   },
-  contentContainer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-  },
-  container: {
-    maxWidth: MaxContentWidth,
-    flexGrow: 1,
-  },
-  titleContainer: {
-    gap: Spacing.three,
-    alignItems: 'center',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.six,
-  },
-  centerText: {
-    textAlign: 'center',
-  },
-  pressed: {
-    opacity: 0.7,
-  },
-  linkButton: {
-    flexDirection: 'row',
-    paddingHorizontal: Spacing.four,
-    paddingVertical: Spacing.two,
-    borderRadius: Spacing.five,
-    justifyContent: 'center',
-    gap: Spacing.one,
-    alignItems: 'center',
-  },
-  sectionsWrapper: {
-    gap: Spacing.five,
-    paddingHorizontal: Spacing.four,
-    paddingTop: Spacing.three,
-  },
-  collapsibleContent: {
-    alignItems: 'center',
-  },
-  imageTutorial: {
+
+  map: {
     width: '100%',
-    aspectRatio: 296 / 171,
-    borderRadius: Spacing.three,
-    marginTop: Spacing.two,
+    height: '100%',
   },
-  imageReact: {
-    width: 100,
-    height: 100,
+
+  message: {
+    position: 'absolute',
+    top: 16,
     alignSelf: 'center',
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderRadius: 10,
+    elevation: 3,
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  messageText: {
+    color: '#26352B',
+    fontSize: 13,
+  },
+
+  errorText: {
+    color: '#C0392B',
+    fontSize: 13,
+  },
+
+  selectedCard: {
+    position: 'absolute',
+    bottom: 20,
+    left: 16,
+    right: 16,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 14,
+    padding: 18,
+    elevation: 5,
+  },
+
+  species: {
+    fontSize: 15,
+    fontWeight: 'bold',
+    color: '#23834D',
+    marginBottom: 8,
+  },
+
+  description: {
+    fontSize: 14,
+    color: '#26352B',
+    marginBottom: 8,
+  },
+
+  address: {
+    fontSize: 12,
+    color: '#78827B',
+    marginBottom: 12,
+  },
+
+  detailsButton: {
+    backgroundColor: '#23834D',
+    padding: 12,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
+
+  detailsButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
   },
 });
