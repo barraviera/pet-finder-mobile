@@ -29,6 +29,11 @@ export default function ExploreScreen() {
 
   const [locating, setLocating] = useState(false);
 
+  const [userLocation, setUserLocation] = useState<{
+    latitude: number;
+    longitude: number;
+  } | null>(null);
+
   // Busca as ocorrências na API
   useEffect(() => {
     async function loadSightings() {
@@ -107,6 +112,13 @@ export default function ExploreScreen() {
         accuracy: Location.Accuracy.Balanced,
       });
 
+      // Armazena a localização do usuário no estado
+      const coords = {
+        latitude: location.coords.latitude,
+        longitude: location.coords.longitude,
+      };
+      setUserLocation(coords);
+
       // Centraliza o mapa na localização encontrada
       // animateToRegion(): movimenta o mapa suavemente até as coordenadas encontradas.
       mapRef.current?.animateToRegion(
@@ -147,6 +159,16 @@ export default function ExploreScreen() {
         onMapReady={() => setMapReady(true)}
         onPress={() => setSelectedSighting(null)}
       >
+
+        {userLocation && (
+          <Marker
+            coordinate={userLocation}
+            title="Você está aqui"
+            description="Sua localização atual"
+            pinColor="#2878E8"
+          />
+        )}
+
         {sightings.map((item) => (
           <Marker
             key={item.id}
