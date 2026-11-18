@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from 'react';
 import {
   ActivityIndicator,
+  Alert,
   Pressable,
   StyleSheet,
   Text,
@@ -13,6 +14,8 @@ import { router } from 'expo-router';
 import { listSightings } from '@/services/sightingService';
 import type { SightingResponse } from '@/types/sighting';
 
+import * as Location from 'expo-location';
+
 export default function ExploreScreen() {
   const mapRef = useRef<MapView>(null);
 
@@ -23,6 +26,8 @@ export default function ExploreScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [mapReady, setMapReady] = useState(false);
+
+  const [locating, setLocating] = useState(false);
 
   // Busca as ocorrências na API
   useEffect(() => {
@@ -78,6 +83,56 @@ export default function ExploreScreen() {
     }
   }, [mapReady, sightings]);
 
+  // Centraliza o mapa na localização do usuário
+  async function handleLocateMe() {
+    try {
+      setLocating(true);
+
+      // Solicita permissão de localização
+      const { status } =
+        // requestForegroundPermissionsAsync(): solicita autorização para acessar a localização enquanto o aplicativo está em uso.
+        await Location.requestForegroundPermissionsAsync();
+
+      if (status !== 'granted') {
+        Alert.alert(
+          'Permissão necessária',
+          'Precisamos da sua localização para centralizar o mapa.',
+        );
+        return;
+      }
+
+      // Obtém a posição atual do dispositivo
+      // getCurrentPositionAsync(): obtém as coordenadas atuais.
+      const location = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.Balanced,
+      });
+
+      // Centraliza o mapa na localização encontrada
+      // animateToRegion(): movimenta o mapa suavemente até as coordenadas encontradas.
+      mapRef.current?.animateToRegion(
+        {
+          // latitudeDelta e longitudeDelta: controlam o nível de aproximação do mapa. Quanto menores os valores, maior o zoom.
+          latitude: location.coords.latitude,
+          longitude: location.coords.longitude,
+          latitudeDelta: 0.01,
+          longitudeDelta: 0.01,
+        },
+        1000,
+      );
+
+    } catch (err) {
+      console.error('Erro ao obter localização:', err);
+
+      Alert.alert(
+        'Erro',
+        'Não foi possível obter sua localização. Verifique se o GPS está ativado.',
+      );
+
+    } finally {
+      setLocating(false);
+    }
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -105,6 +160,18 @@ export default function ExploreScreen() {
           />
         ))}
       </MapView>
+
+      <Pressable
+        style={styles.locationButton}
+        onPress={handleLocateMe}
+        disabled={locating}
+      >
+        {locating ? (
+          <ActivityIndicator size="small" color="#23834D" />
+        ) : (
+          <Text style={styles.locationButtonText}>◎</Text>
+        )}
+      </Pressable>
 
       {loading && (
         <View style={styles.message}>
@@ -234,6 +301,25 @@ const styles = StyleSheet.create({
 
   detailsButtonText: {
     color: '#FFFFFF',
+    fontWeight: 'bold',
+  },
+
+  locationButton: {
+    position: 'absolute',
+    top: 20,
+    right: 16,
+    width: 48,
+    height: 48,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 24,
+    justifyContent: 'center',
+    alignItems: 'center',
+    elevation: 5,
+  },
+
+  locationButtonText: {
+    fontSize: 30,
+    color: '#23834D',
     fontWeight: 'bold',
   },
 });
