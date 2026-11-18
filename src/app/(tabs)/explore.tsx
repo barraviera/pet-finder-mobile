@@ -2,7 +2,10 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Animated,
+  Dimensions,
   Image,
+  PanResponder,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -119,6 +122,66 @@ export default function ExploreScreen() {
 
   // Estado para controlar se a lista de ocorrências próximas está expandida ou recolhida
   const [nearbyListExpanded, setNearbyListExpanded] = useState(false);
+
+  // Altura da tela do dispositivo, usada para definir a altura do painel de ocorrências próximas
+  const SCREEN_HEIGHT = Dimensions.get('window').height;
+  const COLLAPSED_HEIGHT = 360;
+  const EXPANDED_HEIGHT = SCREEN_HEIGHT * 0.8;
+  const panelHeight = useRef(
+    new Animated.Value(COLLAPSED_HEIGHT),
+  ).current;
+
+  // PanResponder: permite que o usuário arraste o painel de ocorrências próximas para expandi-lo ou recolhê-lo.
+  // PanResponder.create(): cria um controlador para reconhecer gestos.
+  // onMoveShouldSetPanResponder: identifica quando o usuário começou a arrastar.
+  // onPanResponderMove: atualiza a altura enquanto o dedo se movimenta.
+  // onPanResponderRelease: decide se o painel deve expandir ou recolher.
+  // Animated.spring(): faz a transição suave até a altura final.
+  // O limite de 50 pixels evita que movimentos muito pequenos acionem a expansão.
+  const panResponder = useRef(
+    PanResponder.create({
+      // onStartShouldSetPanResponder precisa retornar true para que um toque
+      // sem arrasto (um tap) também seja capturado por este responder e
+      // dispare onPanResponderRelease.
+      onStartShouldSetPanResponder: () => true,
+      onMoveShouldSetPanResponder: (_, gestureState) =>
+        Math.abs(gestureState.dy) > 5,
+
+      onPanResponderMove: (_, gestureState) => {
+        const newHeight = nearbyListExpanded
+          ? EXPANDED_HEIGHT - gestureState.dy
+          : COLLAPSED_HEIGHT - gestureState.dy;
+
+        panelHeight.setValue(
+          Math.max(
+            COLLAPSED_HEIGHT,
+            Math.min(EXPANDED_HEIGHT, newHeight),
+          ),
+        );
+      },
+
+      onPanResponderRelease: (_, gestureState) => {
+        // Movimento muito pequeno conta como um toque: alterna o estado
+        // em vez de usar a distância arrastada para decidir.
+        const isTap =
+          Math.abs(gestureState.dy) < 10 &&
+          Math.abs(gestureState.dx) < 10;
+
+        const shouldExpand = isTap
+          ? !nearbyListExpanded
+          : gestureState.dy < -50;
+
+        setNearbyListExpanded(shouldExpand);
+
+        Animated.spring(panelHeight, {
+          toValue: shouldExpand ? EXPANDED_HEIGHT : COLLAPSED_HEIGHT,
+          useNativeDriver: false,
+          tension: 80,
+          friction: 12,
+        }).start();
+      },
+    }),
+  ).current;
 
   // Busca as ocorrências na API
   useEffect(() => {
@@ -251,13 +314,15 @@ export default function ExploreScreen() {
     }
 
     setShowNearbyOnly((current) => !current);
+
+    setNearbyListExpanded(false);
+    Animated.spring(panelHeight, {
+      toValue: COLLAPSED_HEIGHT,
+      useNativeDriver: false,
+    }).start();
+
     setShowNearbyList((current) => !current);
     setSelectedSighting(null);
-  }
-
-  // Alterna a expansão ou recolhimento da lista de ocorrências próximas
-  function handleToggleNearbyListExpanded() {
-    setNearbyListExpanded((current) => !current);
   }
 
   return (
@@ -358,15 +423,15 @@ export default function ExploreScreen() {
       )}
 
       {showNearbyList && (
-        <View
+        <Animated.View
           style={[
             styles.nearbyPanel,
-            { height: nearbyListExpanded ? '80%' : 360 },
+            { height: panelHeight },
           ]}
         >
-          <Pressable
+          <View
             style={styles.panelHeader}
-            onPress={handleToggleNearbyListExpanded}
+            {...panResponder.panHandlers}
           >
             <View style={styles.panelHandle} />
 
@@ -381,7 +446,7 @@ export default function ExploreScreen() {
             <Text style={styles.panelExpandText}>
               {nearbyListExpanded ? 'Recolher lista ▲' : 'Expandir lista ▼'}
             </Text>
-          </Pressable>
+          </View>
 
           {nearbySightings.length === 0 ? (
             <Text style={styles.emptyNearbyText}>
@@ -434,7 +499,7 @@ export default function ExploreScreen() {
               ))}
             </ScrollView>
           )}
-        </View>
+        </Animated.View>
       )}
 
       {selectedSighting && (
