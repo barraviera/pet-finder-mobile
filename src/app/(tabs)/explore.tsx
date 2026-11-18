@@ -2,7 +2,9 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
+  Image,
   Pressable,
+  ScrollView,
   StyleSheet,
   Text,
   View,
@@ -15,6 +17,8 @@ import { listSightings } from '@/services/sightingService';
 import type { SightingResponse } from '@/types/sighting';
 
 import * as Location from 'expo-location';
+
+import { getImageUrl } from '@/services/api';
 
 // Calcula a distância entre dois pontos geográficos usando a fórmula de Haversine
 function calculateDistance(
@@ -108,6 +112,9 @@ export default function ExploreScreen() {
   const visibleSightings = showNearbyOnly
     ? nearbySightings
     : sightings;
+
+  // Estado para controlar a exibição da lista de ocorrências próximas
+  const [showNearbyList, setShowNearbyList] = useState(false);
 
   // Busca as ocorrências na API
   useEffect(() => {
@@ -226,6 +233,10 @@ export default function ExploreScreen() {
   }
 
   // Alterna entre exibir todas as ocorrências ou apenas as próximas do usuário
+  // Agora, ao tocar no botão, ele:
+  // Ativa ou desativa o filtro de ocorrências próximas.
+  // Abre ou fecha o painel inferior.
+  // Limpa a ocorrência selecionada no mapa.
   function handleToggleNearby() {
     if (!userLocation) {
       Alert.alert(
@@ -236,6 +247,21 @@ export default function ExploreScreen() {
     }
 
     setShowNearbyOnly((current) => !current);
+    setShowNearbyList((current) => !current);
+    setSelectedSighting(null);
+  }
+
+  // Alterna a exibição da lista de ocorrências próximas
+  function handleToggleNearbyList() {
+    if (!userLocation) {
+      Alert.alert(
+        'Localização necessária',
+        'Primeiro toque no botão de localização para encontrar sua posição.',
+      );
+      return;
+    }
+
+    setShowNearbyList((current) => !current);
     setSelectedSighting(null);
   }
 
@@ -307,8 +333,8 @@ export default function ExploreScreen() {
             showNearbyOnly && styles.nearbyButtonTextActive,
           ]}
         >
-          {showNearbyOnly
-            ? `Mostrar todas (${sightings.length})`
+          {showNearbyList
+            ? 'Fechar lista'
             : `Próximos de mim · ${nearbySightings.length}`}
         </Text>
       </Pressable>
@@ -333,6 +359,77 @@ export default function ExploreScreen() {
           <Text style={styles.messageText}>
             Nenhuma ocorrência encontrada.
           </Text>
+        </View>
+      )}
+
+      {showNearbyList && (
+        <View style={styles.nearbyPanel}>
+          <Pressable
+            style={styles.panelHeader}
+            onPress={handleToggleNearbyList}
+          >
+            <View style={styles.panelHandle} />
+
+            <Text style={styles.panelTitle}>
+              Animais próximos ({nearbySightings.length})
+            </Text>
+
+            <Text style={styles.panelSubtitle}>
+              Ocorrências em um raio de até 5 km
+            </Text>
+          </Pressable>
+
+          {nearbySightings.length === 0 ? (
+            <Text style={styles.emptyNearbyText}>
+              Nenhuma ocorrência próxima encontrada.
+            </Text>
+          ) : (
+            <ScrollView
+              style={styles.nearbyList}
+              showsVerticalScrollIndicator={false}
+            >
+              {nearbySightings.map((item) => (
+                <Pressable
+                  key={item.id}
+                  style={styles.nearbyItem}
+                  onPress={() => router.push(`/sighting/${item.id}`)}
+                >
+                  {item.photoUrls.length > 0 ? (
+                    <Image
+                      source={{ uri: getImageUrl(item.photoUrls[0]) }}
+                      style={styles.nearbyImage}
+                    />
+                  ) : (
+                    <View style={styles.nearbyImagePlaceholder}>
+                      <Text style={styles.placeholderText}>🐾</Text>
+                    </View>
+                  )}
+
+                  <View style={styles.nearbyInfo}>
+                    <Text style={styles.nearbySpecies}>
+                      {item.species} · {item.color}
+                    </Text>
+
+                    <Text style={styles.nearbyDescription} numberOfLines={2}>
+                      {item.description}
+                    </Text>
+
+                    <Text style={styles.nearbyDistance}>
+                      {item.distanceKm < 1
+                        ? `${Math.round(item.distanceKm * 1000)} metros`
+                        : `${item.distanceKm.toFixed(2)} km`}
+                    </Text>
+
+                    {item.address && (
+                      <Text style={styles.nearbyAddress} numberOfLines={1}>
+                        {item.address}
+                      </Text>
+                    )}
+                  </View>
+                </Pressable>
+              ))}
+            </ScrollView>
+          )}
         </View>
       )}
 
@@ -501,5 +598,112 @@ const styles = StyleSheet.create({
 
   nearbyButtonTextActive: {
     color: '#FFFFFF',
+  },
+
+  nearbyPanel: {
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+    height: 360,
+    backgroundColor: '#FFFFFF',
+    borderTopLeftRadius: 20,
+    borderTopRightRadius: 20,
+    paddingHorizontal: 16,
+    paddingTop: 10,
+    elevation: 10,
+  },
+
+  panelHeader: {
+    alignItems: 'center',
+    paddingBottom: 12,
+  },
+
+  panelHandle: {
+    width: 40,
+    height: 5,
+    borderRadius: 3,
+    backgroundColor: '#D0D5D1',
+    marginBottom: 12,
+  },
+
+  panelTitle: {
+    fontSize: 17,
+    fontWeight: 'bold',
+    color: '#26352B',
+  },
+
+  panelSubtitle: {
+    fontSize: 12,
+    color: '#78827B',
+    marginTop: 4,
+  },
+
+  nearbyList: {
+    flex: 1,
+  },
+
+  nearbyItem: {
+    flexDirection: 'row',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderTopColor: '#EEF0EE',
+    gap: 12,
+  },
+
+  nearbyImage: {
+    width: 82,
+    height: 82,
+    borderRadius: 10,
+  },
+
+  nearbyImagePlaceholder: {
+    width: 82,
+    height: 82,
+    borderRadius: 10,
+    backgroundColor: '#EAF2EC',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+
+  placeholderText: {
+    fontSize: 30,
+  },
+
+  nearbyInfo: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+
+  nearbySpecies: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    color: '#23834D',
+    marginBottom: 4,
+  },
+
+  nearbyDescription: {
+    fontSize: 12,
+    color: '#26352B',
+    marginBottom: 4,
+  },
+
+  nearbyDistance: {
+    fontSize: 12,
+    fontWeight: '600',
+    color: '#23834D',
+  },
+
+  nearbyAddress: {
+    fontSize: 11,
+    color: '#78827B',
+    marginTop: 3,
+  },
+
+  emptyNearbyText: {
+    textAlign: 'center',
+    color: '#78827B',
+    fontSize: 13,
+    marginTop: 30,
   },
 });
