@@ -16,6 +16,35 @@ import type { SightingResponse } from '@/types/sighting';
 
 import * as Location from 'expo-location';
 
+// Calcula a distância entre dois pontos geográficos usando a fórmula de Haversine
+function calculateDistance(
+  lat1: number,
+  lon1: number,
+  lat2: number,
+  lon2: number,
+): number {
+  // earthRadius: raio médio da Terra em quilômetros.
+  const earthRadius = 6371;
+  // toRadians: converte graus em radianos, necessários para as funções trigonométricas.
+  const toRadians = (degrees: number) =>
+    (degrees * Math.PI) / 180;
+
+  const dLat = toRadians(lat2 - lat1);
+  const dLon = toRadians(lon2 - lon1);
+
+  const a =
+    // Math.sin e Math.cos: participam do cálculo da distância.
+    // O resultado é retornado em quilômetros.
+    Math.sin(dLat / 2) ** 2 +
+    Math.cos(toRadians(lat1)) *
+    Math.cos(toRadians(lat2)) *
+    Math.sin(dLon / 2) ** 2;
+
+  const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+  return earthRadius * c;
+}
+
 export default function ExploreScreen() {
   const mapRef = useRef<MapView>(null);
 
@@ -33,6 +62,17 @@ export default function ExploreScreen() {
     latitude: number;
     longitude: number;
   } | null>(null);
+
+  // Distância entre a localização do usuário e a ocorrência selecionada, se houver
+  const selectedDistance =
+    userLocation && selectedSighting
+      ? calculateDistance(
+          userLocation.latitude,
+          userLocation.longitude,
+          selectedSighting.latitude,
+          selectedSighting.longitude,
+        )
+      : null;
 
   // Busca as ocorrências na API
   useEffect(() => {
@@ -88,17 +128,34 @@ export default function ExploreScreen() {
     }
   }, [mapReady, sightings]);
 
+  // Obtém a localização atual do usuário, se a permissão for concedida
+  async function fetchUserLocation() {
+    // requestForegroundPermissionsAsync(): solicita autorização para acessar a localização enquanto o aplicativo está em uso.
+    const { status } = await Location.requestForegroundPermissionsAsync();
+
+    if (status !== 'granted') {
+      return null;
+    }
+
+    // getCurrentPositionAsync(): obtém as coordenadas atuais.
+    const location = await Location.getCurrentPositionAsync({
+      accuracy: Location.Accuracy.Balanced,
+    });
+
+    return {
+      latitude: location.coords.latitude,
+      longitude: location.coords.longitude,
+    };
+  }
+
   // Centraliza o mapa na localização do usuário
   async function handleLocateMe() {
     try {
       setLocating(true);
 
-      // Solicita permissão de localização
-      const { status } =
-        // requestForegroundPermissionsAsync(): solicita autorização para acessar a localização enquanto o aplicativo está em uso.
-        await Location.requestForegroundPermissionsAsync();
+      const coords = await fetchUserLocation();
 
-      if (status !== 'granted') {
+      if (!coords) {
         Alert.alert(
           'Permissão necessária',
           'Precisamos da sua localização para centralizar o mapa.',
@@ -106,17 +163,6 @@ export default function ExploreScreen() {
         return;
       }
 
-      // Obtém a posição atual do dispositivo
-      // getCurrentPositionAsync(): obtém as coordenadas atuais.
-      const location = await Location.getCurrentPositionAsync({
-        accuracy: Location.Accuracy.Balanced,
-      });
-
-      // Armazena a localização do usuário no estado
-      const coords = {
-        latitude: location.coords.latitude,
-        longitude: location.coords.longitude,
-      };
       setUserLocation(coords);
 
       // Centraliza o mapa na localização encontrada
@@ -124,8 +170,7 @@ export default function ExploreScreen() {
       mapRef.current?.animateToRegion(
         {
           // latitudeDelta e longitudeDelta: controlam o nível de aproximação do mapa. Quanto menores os valores, maior o zoom.
-          latitude: location.coords.latitude,
-          longitude: location.coords.longitude,
+          ...coords,
           latitudeDelta: 0.01,
           longitudeDelta: 0.01,
         },
@@ -178,7 +223,12 @@ export default function ExploreScreen() {
             }}
             title={`${item.species} · ${item.color}`}
             description={item.description}
-            onPress={() => setSelectedSighting(item)}
+            onPress={(event) => {
+              // Impede que o toque no marcador propague para o onPress do
+              // MapView, que limparia a seleção logo em seguida.
+              event.stopPropagation();
+              setSelectedSighting(item);
+            }}
           />
         ))}
       </MapView>
@@ -227,6 +277,14 @@ export default function ExploreScreen() {
           <Text style={styles.description} numberOfLines={2}>
             {selectedSighting.description}
           </Text>
+
+          {selectedDistance !== null && (
+            <Text style={styles.distance}>
+              A aproximadamente {selectedDistance < 1
+                ? `${Math.round(selectedDistance * 1000)} metros`
+                : `${selectedDistance.toFixed(2)} km`} de você
+            </Text>
+          )}
 
           {selectedSighting.address && (
             <Text style={styles.address} numberOfLines={1}>
@@ -343,5 +401,12 @@ const styles = StyleSheet.create({
     fontSize: 30,
     color: '#23834D',
     fontWeight: 'bold',
+  },
+
+  distance: {
+    fontSize: 13,
+    fontWeight: '600',
+    color: '#23834D',
+    marginBottom: 12,
   },
 });
