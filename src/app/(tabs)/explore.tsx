@@ -53,6 +53,7 @@ function calculateDistance(
 const NEARBY_RADIUS_KM = 5;
 
 export default function ExploreScreen() {
+
   const mapRef = useRef<MapView>(null);
 
   const [sightings, setSightings] = useState<SightingResponse[]>([]);
@@ -115,6 +116,9 @@ export default function ExploreScreen() {
 
   // Estado para controlar a exibição da lista de ocorrências próximas
   const [showNearbyList, setShowNearbyList] = useState(false);
+
+  // Estado para controlar se a lista de ocorrências próximas está expandida ou recolhida
+  const [nearbyListExpanded, setNearbyListExpanded] = useState(false);
 
   // Busca as ocorrências na API
   useEffect(() => {
@@ -251,18 +255,9 @@ export default function ExploreScreen() {
     setSelectedSighting(null);
   }
 
-  // Alterna a exibição da lista de ocorrências próximas
-  function handleToggleNearbyList() {
-    if (!userLocation) {
-      Alert.alert(
-        'Localização necessária',
-        'Primeiro toque no botão de localização para encontrar sua posição.',
-      );
-      return;
-    }
-
-    setShowNearbyList((current) => !current);
-    setSelectedSighting(null);
+  // Alterna a expansão ou recolhimento da lista de ocorrências próximas
+  function handleToggleNearbyListExpanded() {
+    setNearbyListExpanded((current) => !current);
   }
 
   return (
@@ -363,10 +358,15 @@ export default function ExploreScreen() {
       )}
 
       {showNearbyList && (
-        <View style={styles.nearbyPanel}>
+        <View
+          style={[
+            styles.nearbyPanel,
+            { height: nearbyListExpanded ? '80%' : 360 },
+          ]}
+        >
           <Pressable
             style={styles.panelHeader}
-            onPress={handleToggleNearbyList}
+            onPress={handleToggleNearbyListExpanded}
           >
             <View style={styles.panelHandle} />
 
@@ -376,6 +376,10 @@ export default function ExploreScreen() {
 
             <Text style={styles.panelSubtitle}>
               Ocorrências em um raio de até 5 km
+            </Text>
+
+            <Text style={styles.panelExpandText}>
+              {nearbyListExpanded ? 'Recolher lista ▲' : 'Expandir lista ▼'}
             </Text>
           </Pressable>
 
@@ -605,7 +609,6 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    height: 360,
     backgroundColor: '#FFFFFF',
     borderTopLeftRadius: 20,
     borderTopRightRadius: 20,
@@ -705,5 +708,12 @@ const styles = StyleSheet.create({
     color: '#78827B',
     fontSize: 13,
     marginTop: 30,
+  },
+
+  panelExpandText: {
+    fontSize: 11,
+    color: '#23834D',
+    fontWeight: '600',
+    marginTop: 6,
   },
 });
