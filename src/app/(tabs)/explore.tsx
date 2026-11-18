@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import {
   ActivityIndicator,
   Alert,
@@ -45,6 +45,9 @@ function calculateDistance(
   return earthRadius * c;
 }
 
+// NEARBY_RADIUS_KM: define a distância máxima para considerar uma ocorrência como "próxima" do usuário.
+const NEARBY_RADIUS_KM = 5;
+
 export default function ExploreScreen() {
   const mapRef = useRef<MapView>(null);
 
@@ -67,12 +70,44 @@ export default function ExploreScreen() {
   const selectedDistance =
     userLocation && selectedSighting
       ? calculateDistance(
+        userLocation.latitude,
+        userLocation.longitude,
+        selectedSighting.latitude,
+        selectedSighting.longitude,
+      )
+      : null;
+
+  // Estado para controlar se apenas ocorrências próximas devem ser exibidas
+  const [showNearbyOnly, setShowNearbyOnly] = useState(false);
+
+  // Filtra as ocorrências próximas com base na localização do usuário
+  // map(): calcula a distância de cada ocorrência.
+  // filter(): mantém somente as que estão a até 5 km.
+  // sort(): ordena da mais próxima para a mais distante.
+  // useMemo(): memoriza o resultado e refaz o cálculo somente quando sightings ou userLocation mudar.
+  const nearbySightings = useMemo(() => {
+    if (!userLocation) {
+      return [];
+    }
+
+    return sightings
+      .map((item) => ({
+        ...item,
+        distanceKm: calculateDistance(
           userLocation.latitude,
           userLocation.longitude,
-          selectedSighting.latitude,
-          selectedSighting.longitude,
-        )
-      : null;
+          item.latitude,
+          item.longitude,
+        ),
+      }))
+      .filter((item) => item.distanceKm <= NEARBY_RADIUS_KM)
+      .sort((a, b) => a.distanceKm - b.distanceKm);
+  }, [sightings, userLocation]);
+
+  // Determina quais ocorrências devem ser exibidas no mapa com base no estado showNearbyOnly.
+  const visibleSightings = showNearbyOnly
+    ? nearbySightings
+    : sightings;
 
   // Busca as ocorrências na API
   useEffect(() => {
@@ -97,11 +132,11 @@ export default function ExploreScreen() {
 
   // Ajusta o mapa para enquadrar os marcadores
   useEffect(() => {
-    if (!mapReady || sightings.length === 0) {
+    if (!mapReady || visibleSightings.length === 0) {
       return;
     }
 
-    const coordinates = sightings.map((item) => ({
+    const coordinates = visibleSightings.map((item) => ({
       latitude: item.latitude,
       longitude: item.longitude,
     }));
@@ -126,7 +161,7 @@ export default function ExploreScreen() {
         animated: true,
       });
     }
-  }, [mapReady, sightings]);
+  }, [mapReady, visibleSightings]);
 
   // Obtém a localização atual do usuário, se a permissão for concedida
   async function fetchUserLocation() {
@@ -190,6 +225,20 @@ export default function ExploreScreen() {
     }
   }
 
+  // Alterna entre exibir todas as ocorrências ou apenas as próximas do usuário
+  function handleToggleNearby() {
+    if (!userLocation) {
+      Alert.alert(
+        'Localização necessária',
+        'Primeiro toque no botão de localização para encontrar sua posição.',
+      );
+      return;
+    }
+
+    setShowNearbyOnly((current) => !current);
+    setSelectedSighting(null);
+  }
+
   return (
     <View style={styles.container}>
       <MapView
@@ -214,7 +263,7 @@ export default function ExploreScreen() {
           />
         )}
 
-        {sightings.map((item) => (
+        {visibleSightings.map((item) => (
           <Marker
             key={item.id}
             coordinate={{
@@ -243,6 +292,25 @@ export default function ExploreScreen() {
         ) : (
           <Text style={styles.locationButtonText}>◎</Text>
         )}
+      </Pressable>
+
+      <Pressable
+        style={[
+          styles.nearbyButton,
+          showNearbyOnly && styles.nearbyButtonActive,
+        ]}
+        onPress={handleToggleNearby}
+      >
+        <Text
+          style={[
+            styles.nearbyButtonText,
+            showNearbyOnly && styles.nearbyButtonTextActive,
+          ]}
+        >
+          {showNearbyOnly
+            ? `Mostrar todas (${sightings.length})`
+            : `Próximos de mim · ${nearbySightings.length}`}
+        </Text>
       </Pressable>
 
       {loading && (
@@ -408,5 +476,30 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     color: '#23834D',
     marginBottom: 12,
+  },
+
+  nearbyButton: {
+    position: 'absolute',
+    top: 20,
+    left: 16,
+    backgroundColor: '#FFFFFF',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+    borderRadius: 24,
+    elevation: 5,
+  },
+
+  nearbyButtonActive: {
+    backgroundColor: '#23834D',
+  },
+
+  nearbyButtonText: {
+    color: '#23834D',
+    fontSize: 13,
+    fontWeight: 'bold',
+  },
+
+  nearbyButtonTextActive: {
+    color: '#FFFFFF',
   },
 });
