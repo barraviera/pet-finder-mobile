@@ -68,6 +68,15 @@ export default function ProfileScreen() {
       </View>
 
       <Pressable
+        style={styles.mySightingsButton}
+        onPress={() => router.push('/my-sightings')}
+      >
+        <Text style={styles.mySightingsButtonText}>
+          Minhas ocorrências
+        </Text>
+      </Pressable>
+
+      <Pressable
         style={[styles.logoutButton, loading && styles.disabledButton]}
         onPress={handleLogout}
         disabled={loading}
@@ -126,5 +135,19 @@ const styles = StyleSheet.create({
   },
   disabledButton: {
     opacity: 0.6,
+  },
+
+  mySightingsButton: {
+    backgroundColor: '#23834D',
+    padding: 16,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginTop: 20,
+  },
+
+  mySightingsButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
   },
 });

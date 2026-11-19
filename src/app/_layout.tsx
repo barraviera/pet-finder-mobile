@@ -101,6 +101,7 @@ function RootNavigator() {
         <Stack.Screen name="login" />
         <Stack.Screen name="register" />
         <Stack.Screen name="create-sighting" />
+        <Stack.Screen name="my-sightings" />
         <Stack.Screen name="(tabs)" />
       </Stack>
     </>

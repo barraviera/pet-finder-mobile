@@ -45,6 +45,15 @@ export async function listSightings(): Promise<
   return response.data;
 }
 
+// Rota de avistamentos do usuário: GET /api/v1/sightings/mine que está definida no backend. A função listMySightings faz a chamada para essa rota e retorna os dados recebidos.
+// O que essa função faz?
+// É praticamente igual à listSightings() mas retorna apenas os avistamentos do usuário logado. A rota /api/v1/sightings/mine é protegida, ou seja, só pode ser acessada por usuários autenticados. 
+// Por isso, é necessário enviar o token de autenticação no cabeçalho da requisição. O axios já está configurado para enviar o token automaticamente.
+export async function listMySightings(): Promise<SightingResponse[]> {
+  const response = await api.get<SightingResponse[]>('/api/v1/sightings/mine');
+  return response.data;
+}
+
 export async function getSighting(
   id: string,
 ): Promise<SightingResponse> {
