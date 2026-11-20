@@ -63,6 +63,9 @@ export default function HomeScreen() {
   // Indica se existem filtros aplicados
   const [appliedFilters, setAppliedFilters] = useState<SightingFilters>({});
 
+  // Indica se a busca está em andamento
+  const [searching, setSearching] = useState(false);
+
   // Busca os avistamentos da API
   // Observe que agora temos: [appliedFilters] como dependência do useCallback.
   // Isso significa que a função será recriada quando os filtros aplicados mudarem.
@@ -70,6 +73,8 @@ export default function HomeScreen() {
   const loadData = useCallback(async () => {
     try {
       setError(null);
+      // Antes da consulta, limpamos a lista de avistamentos para evitar exibir dados desatualizados.
+      setSearching(true);
 
       const sightingsData = await searchSightings(appliedFilters);
 
@@ -85,8 +90,20 @@ export default function HomeScreen() {
     } finally {
       setLoading(false);
       setRefreshing(false);
+      // Sempre que a busca terminar, seja com sucesso ou erro, garantimos que o estado searching seja atualizado para false.
+      setSearching(false);
     }
   }, [appliedFilters]);
+
+  // variável para identificar filtros ativos
+  // Ela nos ajudará a distinguir uma lista vazia de uma pesquisa sem resultados.
+  const hasActiveFilters = Boolean(
+    appliedFilters.species ||
+    appliedFilters.status ||
+    appliedFilters.animalSize ||
+    appliedFilters.color ||
+    appliedFilters.search
+  );
 
   // Debounce para a busca
   // O debounce é uma técnica que limita a frequência com que uma função é executada.
@@ -104,10 +121,19 @@ export default function HomeScreen() {
   // Sempre que o debouncedSearch mudar, atualizamos os filtros aplicados.
   // Com isso, quando o usuário parar de digitar, a busca será atualizada automaticamente, preservando os filtros estruturados que já estavam aplicados.
   useEffect(() => {
-    setAppliedFilters((currentFilters) => ({
-      ...currentFilters,
-      search: debouncedSearch || undefined,
-    }));
+    setAppliedFilters((currentFilters) => {
+      // Assim evitamos atualizar o estado quando a busca efetivamente não mudou.
+      const nextSearch = debouncedSearch || undefined;
+
+      if (currentFilters.search === nextSearch) {
+        return currentFilters;
+      }
+
+      return {
+        ...currentFilters,
+        search: nextSearch,
+      };
+    });
   }, [debouncedSearch]);
 
   // Antes usavamos o useEffect, mas agora estamos usando o useFocusEffect para recarregar os dados sempre que a tela for focada
@@ -293,6 +319,23 @@ export default function HomeScreen() {
                 Animais avistados
               </Text>
 
+              <View style={styles.resultsInfo}>
+                <Text style={styles.resultsCount}>
+                  {sightings.length === 1
+                    ? '1 ocorrência encontrada'
+                    : `${sightings.length} ocorrências encontradas`}
+                </Text>
+
+                {searching && (
+                  <View style={styles.searchingIndicator}>
+                    <ActivityIndicator size="small" color="#23834D" />
+                    <Text style={styles.searchingText}>
+                      Atualizando...
+                    </Text>
+                  </View>
+                )}
+              </View>
+
               <View style={styles.filterContainer}>
                 <Text style={styles.filterTitle}>Buscar ocorrências</Text>
 
@@ -418,9 +461,19 @@ export default function HomeScreen() {
             </View>
           }
           ListEmptyComponent={
-            <Text style={styles.emptyText}>
-              Nenhum avistamento cadastrado ainda.
-            </Text>
+            <View style={styles.emptyContainer}>
+              <Text style={styles.emptyText}>
+                {hasActiveFilters
+                  ? 'Nenhuma ocorrência encontrada com esses critérios.'
+                  : 'Nenhum avistamento cadastrado ainda.'}
+              </Text>
+
+              {hasActiveFilters && (
+                <Text style={styles.emptyHint}>
+                  Experimente alterar ou limpar os filtros.
+                </Text>
+              )}
+            </View>
           }
         />
       )}
@@ -683,5 +736,42 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 13,
+  },
+
+  resultsInfo: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 14,
+  },
+
+  resultsCount: {
+    fontSize: 13,
+    color: '#66736A',
+    fontWeight: '500',
+  },
+
+  searchingIndicator: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+
+  searchingText: {
+    fontSize: 12,
+    color: '#23834D',
+  },
+
+  emptyContainer: {
+    alignItems: 'center',
+    paddingHorizontal: 20,
+    paddingVertical: 30,
+  },
+
+  emptyHint: {
+    color: '#89938B',
+    fontSize: 13,
+    textAlign: 'center',
+    marginTop: 8,
   },
 });
