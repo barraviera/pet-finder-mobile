@@ -1,4 +1,4 @@
-import { useCallback, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { useFocusEffect } from 'expo-router';
 
 import {
@@ -56,6 +56,9 @@ export default function HomeScreen() {
   const [animalSize, setAnimalSize] = useState<AnimalSize | undefined>();
   const [color, setColor] = useState('');
   const [search, setSearch] = useState('');
+  // search: texto que o usuário está digitando.
+  // debouncedSearch: texto que será efetivamente enviado à API.
+  const [debouncedSearch, setDebouncedSearch] = useState('');
 
   // Indica se existem filtros aplicados
   const [appliedFilters, setAppliedFilters] = useState<SightingFilters>({});
@@ -84,6 +87,28 @@ export default function HomeScreen() {
       setRefreshing(false);
     }
   }, [appliedFilters]);
+
+  // Debounce para a busca
+  // O debounce é uma técnica que limita a frequência com que uma função é executada.
+  // No caso, ele espera 500ms após o usuário parar de digitar para atualizar o estado debouncedSearch.
+  useEffect(() => {
+    const timeout = setTimeout(() => {
+      setDebouncedSearch(search.trim());
+    }, 500);
+
+    return () => {
+      clearTimeout(timeout);
+    };
+  }, [search]);
+
+  // Sempre que o debouncedSearch mudar, atualizamos os filtros aplicados.
+  // Com isso, quando o usuário parar de digitar, a busca será atualizada automaticamente, preservando os filtros estruturados que já estavam aplicados.
+  useEffect(() => {
+    setAppliedFilters((currentFilters) => ({
+      ...currentFilters,
+      search: debouncedSearch || undefined,
+    }));
+  }, [debouncedSearch]);
 
   // Antes usavamos o useEffect, mas agora estamos usando o useFocusEffect para recarregar os dados sempre que a tela for focada
   useFocusEffect(
@@ -191,7 +216,7 @@ export default function HomeScreen() {
       status,
       animalSize,
       color: color.trim() || undefined,
-      search: search.trim() || undefined,
+      search: debouncedSearch || undefined,
     };
 
     setAppliedFilters(filters);
@@ -204,6 +229,7 @@ export default function HomeScreen() {
     setAnimalSize(undefined);
     setColor('');
     setSearch('');
+    setDebouncedSearch('');
     setAppliedFilters({});
   }
 
