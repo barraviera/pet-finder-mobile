@@ -2,6 +2,8 @@
 import { api } from './api';
 
 import type {
+  AnimalSize,
+  AnimalSpecies,
   CreateSightingRequest,
   SightingResponse,
 } from '@/types/sighting';
@@ -13,6 +15,19 @@ const ALLOWED_IMAGE_TYPES = [
   'image/png',
   'image/webp',
 ];
+
+// O que é uma interface em TypeScript?
+// Uma interface em TypeScript é uma forma de definir a estrutura de um objeto, especificando os tipos de suas propriedades. 
+// Ela serve como um contrato que garante que os objetos que implementam essa interface terão as propriedades e tipos definidos. 
+// As interfaces são úteis para garantir consistência e segurança de tipo em seu código, permitindo que você defina claramente como os dados devem ser estruturados e utilizados.
+// Ela representa os parâmetros aceitos pelo endpoint. Todos são opcionais, permitindo combinar qualquer quantidade de filtros.
+export interface SightingFilters {
+  species?: AnimalSpecies;
+  status?: 'OPEN' | 'RESOLVED';
+  animalSize?: AnimalSize;
+  color?: string;
+  search?: string;
+}
 
 // O tipo SightingResponse[] indica que esperamos receber um array de avistamentos.
 // Uma resposta hipotética da API poderia ser:
@@ -148,4 +163,33 @@ export async function uploadSightingPhotos(
       },
     },
   );
+}
+
+// Rota de busca de avistamentos: GET /api/v1/sightings/search que está definida no backend. A função searchSightings faz a chamada para essa rota e retorna os dados recebidos.
+// filters = {} permite chamar a função sem filtros.
+// ...filters repassa os filtros selecionados.
+// trim() remove espaços desnecessários no início e no final dos campos textuais.
+// || undefined evita enviar parâmetros textuais vazios.
+// params é um recurso do Axios que transforma o objeto em parâmetros da URL.
+// Ex.:
+// searchSightings({
+//   species: 'DOG',
+//   status: 'OPEN',
+//   search: 'Rex',
+// });
+export async function searchSightings(
+  filters: SightingFilters = {},
+): Promise<SightingResponse[]> {
+  const params = {
+    ...filters,
+    color: filters.color?.trim() || undefined,
+    search: filters.search?.trim() || undefined,
+  };
+
+  const response = await api.get<SightingResponse[]>(
+    '/api/v1/sightings/search',
+    { params },
+  );
+
+  return response.data;
 }
